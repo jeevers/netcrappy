@@ -15,225 +15,257 @@ class NetCrAPIOut(Exception):
     def __str__(self):
         return repr(self.errmsg)
 
+
 def check_zapi_error(output, errormsg='An error occured: %s'):
+    """@todo: Docstring for check_zapi_error.
+
+    :output: @todo
+    :errormsg: @todo
+    :returns: @todo
+
+    """
     if output and output.results_errno() != 0:
-        reason = out.results_reason()
+        reason = output.results_reason()
         raise NetCrAPIOut(errormsg % reason)
 
 
-def filer_connection(filer, user, password, transport_type='HTTPS'):
+class filer:
     '''
-    Creates the connection to the filer. Transport_type defaults to 'HTTPS'.
-    Todo:
-        Allow different connection styles?
+    Class for interacting with Filers or Clusters
     '''
-    conn = NaServer(filer, 1, 3)
-
-    out = conn.set_transport_type(transport_type)
-    if out and out.results_errno() != 0:
-        r = out.results_reason()
-        raise NetCrAPIOut("connection to filer failed: %s" % r)
-        #print("connection to filer failed: %s\n" % r)
-        #sys.exit(2)
-
-    out = conn.set_style("LOGIN")
-    if out and out.results_errno() != 0:
-        r = out.results_reason()
-        raise NetCrAPIOut("connection to filer failed: %s" % r)
-        #print("connection to filer failed: %s\n" % r)
-        #sys.exit(2)
-
-    out = conn.set_admin_user(user, password)
-    if out and out.results_errno() != 0:
-        r = out.results_reason()
-        raise NetCrAPIOut("connection to filer failed: %s" % r)
-        #print("connection to filer failed: %s\n" % r)
-        #sys.exit(2)
-
-    return conn
-
-
-def get_filer_api_list(conn):
-    '''
-    returns list of ONTAP APIs
-    '''
-    list_in = NaElement("system-api-list")
-
-
-def get_perf_objects(conn):
-    '''
-    Lists all performancei objects along with privilege levels.
-    '''
-    list_in = NaElement("perf-object-list-info")
-    out = conn.invoke_elem(list_in)
-    if out.results_status() == "failed":
-        raise NetCrAPIOut(out.results_reason())
-        #print(out.results_reason() + "\n")
-        #sys.exit(2)
-    obj_info = out.child_get("objects")
-    result = obj_info.children_get()
-    obj_list = []
-    for obj in result:
-        obj_name = obj.child_get_string("name")
-        priv = obj.child_get_string("privilege-level")
-        obj_list.append([obj_name, priv])
-    return obj_list
-
-def get_instance_list(conn, perf_obj):
-    '''
-    Lists instances associated with the supplied performance object.
-    Some objects actually have instances, like 'volume' and 'aggregate', while
-    others only have themselves (so sad...) like 'system' or 'cifs'
-    '''
-    list_in = NaElement("perf-object-instance-list-info")
-    list_in.child_add_string("objectname", perf_obj)
-
-    out = conn.invoke_elem(list_in)
-    if out.results_status() == "failed":
-        raise NetCrAPIOut(out.results_reason())
-        #print(out.results_reason() + "\n")
-        #sys.exit(2)
-
-    inst_info = out.child_get("instances")
-    result = inst_info.children_get()
-
-    instance_names = []
-    for inst in result:
-        inst_name = inst.child_get_string("name")
-        instance_names.append(inst_name)
-    
-    return instance_names
-
-def get_counter_list(conn, perf_obj):
-    '''
-    Returns the counters associated with a performance object.
-    This function also outputs the 'base counter', 'privilege level' and 
-    'unit' of the counter.
-    '''
-    list_in = NaElement("perf-object-counter-list-info")
-    list_in.child_add_string("objectname", perf_obj)
-
-    out = conn.invoke_elem(list_in)
-    if out.results_status() == "failed":
-        raise NetCrAPIOut(out.results_reason())
-        #print(out.results_reason() + "\n")
-        #sys.exit(2)
-    
-    counter_info = out.child_get("counters")
-    result = counter_info.children_get()
-
-    counter_list = []
-    for counter in result:
-        counter_name = counter.child_get_string("name")
+    def __init__(self, filer, user, password, transport_type='HTTPS'):
+        '''
+        Creates the connection to the filer. Transport_type defaults to 'HTTPS'.
+        Todo:
+            Allow different connection styles?
+        '''
+        conn = NaServer(filer, 1, 3)
+        out = conn.set_transport_type(transport_type)
+        check_zapi_error(out, "connection to filer failed: %s")
+        out = conn.set_style("LOGIN")
+        check_zapi_error(out, "connection to filer failed: %s")
+        out = conn.set_admin_user(user, password)
+        check_zapi_error(out, "connection to filer failed: %s")
+        self.conn = conn
         
-        if counter.child_get_string("base-counter"):
-            base_counter = counter.child_get_string("base-counter")
-        else:
-            base_counter = "None"
+    def invoke(self, *args):
+        """@todo: Docstring for invoke.
 
-        privilege_level = counter.child_get_string("privilege-level")
+        :args: Arguments passed to NaServer.invoke() 
+        :returns: API output object
 
-        if counter.child_get_string("unit"):
-            unit = counter.child_get_string("unit")
-        else:
-            unit = "None"
+        """
+        out = self.conn.invoke(*args)
+        check_zapi_error(out)
+        return out
 
-        if counter.child_get_string("properties"):
-            counter_type = counter.child_get_string("properties")
-        else:
-            counter_type = "None"
-        counter_list.append([counter_name, base_counter, counter_type, privilege_level, unit])
-    return counter_list
+    def invoke_elem(self,  naelem):
+        """@todo: Docstring for invoke_elem.
 
-def get_perfdata_by_counter(conn, perf_obj, counter_list, max_records=10, domain='test'):
-    '''
-    Takes a list of counters for a given performances and returns the
-    counters for all instances of the performance object.
-    The ouput is a list of crazy-ass tuples of the following format:
-        (path, (value, time))
+        :naelem: NaElement object
+        :returns: output object
 
-        where:
-            - path is a period (.) delimited string containing the
-            domain, filername instance name, performance object and
-            counter name
-            - value is the counter value
-            - time is the epoch time (number of seconds since the great
-            computer Epoch (1/1/1970?) of the measurement
-    This output is ready for pushing into graphite.
-    '''
+        """
+        out = self.conn.invoke_elem(naelem)
+        check_zapi_error(out)
+        return out
 
-    path_base = "%s.storage.%s.%s." % (domain,
-                                       conn.server_type.lower(),
-                                       conn.server.lower())
+    def get_filer_api_list(self):
+        '''
+         @todo: return list of ONTAP APIs
+        '''
+        #list_in = NaElement("system-api-list")
+        pass
 
-    perf_in = NaElement("perf-object-get-instances-iter-start")
-    perf_in.child_add_string(("objectname"), perf_obj)
-    counters = NaElement("counters")
+    def get_perf_objects(self):
+        '''
+        Lists all performance objects along with privilege levels.
+        '''
+        list_in = NaElement("perf-object-list-info")
+        out = self.invoke_elem(list_in)
+        check_zapi_error(out)
+        obj_info = out.child_get("objects")
+        result = obj_info.children_get()
+        obj_list = []
+        for obj in result:
+            obj_name = obj.child_get_string("name")
+            priv = obj.child_get_string("privilege-level")
+            obj_list.append([obj_name, priv])
+        return obj_list
+    def get_instance_list(self, perf_obj):
+        '''
+        Lists instances associated with the supplied performance object.
+        Some objects actually have instances, like 'volume' and 'aggregate', while
+        others only have themselves (so sad...) like 'system' or 'cifs'
+        '''
+        list_in = NaElement("perf-object-instance-list-info")
+        list_in.child_add_string("objectname", perf_obj)
 
-    for item in counter_list:
-        counters.child_add_string("counter", item)
+        out = self.invoke_elem(list_in)
+        check_zapi_error(out)
+        inst_info = out.child_get("instances")
+        result = inst_info.children_get()
 
-    perf_in.child_add(counters)
+        instance_names = []
+        for inst in result:
+            inst_name = inst.child_get_string("name")
+            instance_names.append(inst_name)
+        
+        return instance_names
 
-    now = int(time.time())
-    out = conn.invoke_elem(perf_in)
-    if out.results_status() == "failed":
-        raise NetCrAPIOut(out.results_reason())
+    def get_counter_list(self, perf_obj):
+        '''
+        Returns the counters associated with a performance object.
+        This function also outputs the 'base counter', 'privilege level' and 
+        'unit' of the counter.
+        '''
+        list_in = NaElement("perf-object-counter-list-info")
+        list_in.child_add_string("objectname", perf_obj)
+        out = self.invoke_elem(list_in)
+        check_zapi_error(out)
+        counter_info = out.child_get("counters")
+        result = counter_info.children_get()
+        counter_list = []
+        for counter in result:
+            counter_name = counter.child_get_string("name")
+            if counter.child_get_string("base-counter"):
+                base_counter = counter.child_get_string("base-counter")
+            else:
+                base_counter = "None"
 
-    iter_tag = out.child_get_string("tag")
-    num_records = 1
-    perfdata = []
+            privilege_level = counter.child_get_string("privilege-level")
 
-    while num_records != 0:
-        perf_in = NaElement("perf-object-get-instances-iter-next")
-        perf_in.child_add_string("tag", iter_tag)
-        perf_in.child_add_string("maximum", max_records)
-        out = conn.invoke_elem(perf_in)
+            if counter.child_get_string("unit"):
+                unit = counter.child_get_string("unit")
+            else:
+                unit = "None"
 
-        if out.results_status() == "failed":
-            raise NetCrAPIOut(out.results_reason())
+            if counter.child_get_string("properties"):
+                counter_type = counter.child_get_string("properties")
+            else:
+                counter_type = "None"
+            counter_list.append([counter_name,
+                                 base_counter,
+                                 counter_type,
+                                 privilege_level,
+                                 unit])
+        return counter_list
 
-        num_records = out.child_get_int("records")
+    def get_volumes(self):
+        """@todo: Docstring for get_volumes.
+        :returns: @todo
 
-        if num_records > 0:
-            instances_list = out.child_get("instances")
-            instances = instances_list.children_get()
+        """
+        pass
 
-            for inst in instances:
-                inst_name_raw = inst.child_get_string("name")
-                if perf_obj == 'lun':
-                    remove_vol = re.sub('/vol/', '', inst_name_raw)
-                    sub_slashes = re.sub('/', '.', remove_vol)
-                    inst_name = sub_slashes
-                else:
-                    inst_name = inst_name_raw
-                counters_list = inst.child_get("counters")
-                counters = counters_list.children_get()
+    def get_aggrs(self):
+        """@todo: Docstring for get_aggrs.
+        :returns: @todo
 
-                for counter in counters:
-                    counter_name = counter.child_get_string("name")
-                    #counter_value = counter.child_get_string("value")
-                    counter_val_int = counter.child_get_int("value")
-                    counter_path = path_base + "%s.%s.%s" % (perf_obj,
-                                                             inst_name,
-                                                             counter_name)
+        """
+        out = self.invoke('aggr-list-info')
+        check_zapi_error(out)
+        aggr_info_items = {"name": "string",
+                           "state": "string",
+                           "size-total": "integer",
+                           "size-used": "integer",
+                           "size-available": "integer",
+                           "volume-count": "integer",
+                           "has-local-root": "string"
+                          }
+        aggr_list = out.child_get('aggregates').children_get()
+        aggr_info = {}
+        for aggr_obj in aggr_list:
+            aggr_name = aggr_obj.child_get_string('name')
+            aggr_info[aggr_name] = {}
+            #print aggr_name
+            for item_name, item_type in aggr_info_items.iteritems():
+                #print("name: %s, type: %s" % (item_name, item_type))
+                if item_type == 'string':
+                    aggr_info[aggr_name][item_name] = aggr_obj.child_get_string(item_name)
+                elif item_type == 'integer':
+                    aggr_info[aggr_name][item_name] = aggr_obj.child_get_int(item_name)
+        return aggr_info            
 
-                    perfdata.append((counter_path,
-                                     (now, counter_val_int)))
-                    #perfdata.append([counter_path,
-                    #                 counter_val_int,
-                    #                 counter_value,
-                    #                 now])
-    
-    perf_in = NaElement("perf-object-get-instances-iter-end")
-    perf_in.child_add_string("tag", iter_tag)
-    out = conn.invoke_elem(perf_in)
-    if out.results_status() == "failed":
-        raise NetCrAPIOut(out.results_reason())
+        pass
 
-    return perfdata
+    def create_vol(self, name, aggr, size, options):
+        """@todo: Docstring for create_vol.
+
+        :name: @todo
+        :aggr: @todo
+        :size: @todo
+        :options: @todo
+        :returns: @todo
+
+        """
+        pass
+
+    def system_info(self):
+        """@todo: Docstring for system_info.
+        :returns: @todo
+        This method does not work in cmode
+
+        """
+        out = self.invoke('system-get-info')
+        check_zapi_error(out)
+        system_info_objs = {"backplane-part-number": "string", 
+                            "backplane-revision": "string",
+                            "backplane-serial-number": "string",
+                            "board-speed": "integer",
+                            "board-type": "string",
+                            "controller-address": "string",
+                            "cpu-ciob-revision-id": "string",
+                            "cpu-firmware-release": "string",
+                            "cpu-microcode-version": "string",
+                            "cpu-part-number": "string",
+                            "cpu-processor-id": "string",
+                            "cpu-processor-type": "string",
+                            "cpu-revision": "string",
+                            "cpu-serial-number": "string",
+                            "memory-size": "integer",
+                            "number-of-processors": "integer",
+                            "partner-system-id": "string",
+                            "partner-system-name": "string",
+                            "partner-system-serial-number": "string",
+                            "prod-type": "string",
+                            "supports-raid-array": "string",
+                            "system-id": "string",
+                            "system-machine-type": "string",
+                            "system-model": "string",
+                            "system-name": "string",
+                            "system-revision": "string",
+                            "system-serial-number": "string",
+                            "vendor-id": "string"
+                           }
+        sysinfo_filers = out.children_get()
+        sysinfo = {}
+        for filer_obj in sysinfo_filers:
+            filer_name = filer_obj.child_get_string('system-name')
+            sysinfo[filer_name] = {}
+            for item_name, item_type in system_info_objs.iteritems():
+                if item_type == 'string':
+                    sysinfo[filer_name][item_name] = filer_obj.child_get_string(item_name)
+                elif item_type == 'integer':
+                    sysinfo[filer_name][item_name] = filer_obj.child_get_int(item_name)
+        return sysinfo
 
 
+
+class volume:
+    def __init__(self, filer, name):
+        self.filer = filer
+        self.name = name
+
+    def create(self, aggr, size):
+        """@todo: Docstring for create.
+
+        :aggr: @todo
+        :size: @todo
+        :returns: @todo
+
+        """
+        pass
 #def get_snapshots(conn, volume_name):
 #    output_snaps = conn.invoke("snapshot-list-info",
 #                               "target-name", volume_name,
