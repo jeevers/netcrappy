@@ -189,17 +189,18 @@ class filer:
 
         pass
 
-    def create_vol(self, name, aggr, size, options):
+    def create_vol(self, name, aggr, size):
         """@todo: Docstring for create_vol.
 
-        :name: @todo
-        :aggr: @todo
-        :size: @todo
-        :options: @todo
-        :returns: @todo
+        :name: Name of volume
+        :aggr: Containing aggregate
+        :size: Size in the form of <number>[kmgt]
+        :returns: 'volume' object
 
         """
-        pass
+        vol = volume(self, name)
+        vol.create(aggr, size)
+        return vol
 
     def system_info(self):
         """@todo: Docstring for system_info.
@@ -253,8 +254,9 @@ class filer:
 
 
 class volume:
-    def __init__(self, filer, name):
-        self.filer = filer
+    def __init__(self, filer_inst, name):
+        self.invoke = filer_inst.invoke
+        self.invoke_elem = filer_inst.invoke_elem
         self.name = name
 
     def create(self, aggr, size):
@@ -265,11 +267,109 @@ class volume:
         :returns: @todo
 
         """
+        list_in = NaElement('volume-create')
+        #name
+        list_in.child_add_string("volume", self.name)
+        #aggr
+        list_in.child_add_string("containing-aggr-name", aggr)
+        #size
+        size_pattern = re.compile('^[1-9][0-9]*[kmgt]')
+        if size_pattern.match(size):
+            list_in.child_add_string("size", size)
+        else:
+            raise NetCrAPIOut("Size not valid. Please use <number>k|m|g|t.")
+            pass
+        #space reservation (none)
+        list_in.child_add_string("space-reserve", "none")
+        #language (en_US)
+        list_in.child_add_string("language-code", "en_US")
+        out = self.invoke_elem(list_in)
+        check_zapi_error(out)
+
         pass
-#def get_snapshots(conn, volume_name):
-#    output_snaps = conn.invoke("snapshot-list-info",
-#                               "target-name", volume_name,
-#                               "target-type", "volume",
-#                               "terse", "True"
-#                              )
+    def online(self):
+        """@todo: Docstring for online.
+        :returns: @todo
+
+        """
+        out = self.invoke('volume-online',
+                         'name', self.name
+                         )
+        check_zapi_error(out)
+    def offline(self, cifs_delay=0):
+        """@todo: Docstring for offline.
+        :cifs_delay: number of minutes to delay offline for cifs users
+                     defaults to 0 (immediate termination)
+        :returns: @todo
+
+        """
+        out = self.invoke('volume-offline',
+                         'name', self.name,
+                         'cifs-delay', cifs_delay
+                         )
+        check_zapi_error(out)
+    def destroy(self):
+        """@todo: Docstring for destroy.
+        :returns: @todo
+
+        """
+        out = self.invoke('volume-destroy',
+                         'name', self.name)
+        check_zapi_error(out)
+    def get_option(self, option):
+        """@todo: Docstring for get_option.
+
+        :option: @todo
+        :returns: @todo
+
+        """
+        pass
+    def set_option(self, option, value):
+        """@todo: Docstring for set_option.
+
+        :option: @todo
+        :value: @todo
+        :returns: @todo
+
+        """
+        out = self.invoke('volume-set-option',
+                          'volume', self.name,
+                          'option-name', option,
+                          'option-value', value
+                          )
+        check_zapi_error(out)
+    def get_snapshots(self):
+        """@todo: Docstring for get_snapshots.
+        :returns: @todo
+
+        """
+    #    out = self.invoke("snapshot-list-info",
+    #                               "target-name", volume_name,
+    #                               "target-type", "volume",
+    #                               "terse", "True"
+    #                              )
+
+        pass
+    def create_snapshot(self, snap_name):
+        """@todo: Docstring for create_snapshot.
+
+        :snap_name: @todo
+        :returns: @todo
+
+        """
+        pass
+    def delete_snapshot(self, snap_name):
+        """@todo: Docstring for delete_snapshot.
+
+        :snap_name: @todo
+        :returns: @todo
+
+        """
+        pass
+    #def get_snapshots(self):
+    #    out = self.invoke("snapshot-list-info",
+    #                               "target-name", volume_name,
+    #                               "target-type", "volume",
+    #                               "terse", "True"
+    #                              )
 
