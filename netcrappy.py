@@ -187,8 +187,6 @@ class filer:
                     aggr_info[aggr_name][item_name] = aggr_obj.child_get_int(item_name)
         return aggr_info            
 
-        pass
-
     def create_vol(self, name, aggr, size):
         """@todo: Docstring for create_vol.
 
@@ -286,7 +284,6 @@ class volume:
         out = self.invoke_elem(list_in)
         check_zapi_error(out)
 
-        pass
     def online(self):
         """@todo: Docstring for online.
         :returns: @todo
@@ -316,14 +313,26 @@ class volume:
         out = self.invoke('volume-destroy',
                          'name', self.name)
         check_zapi_error(out)
-    def get_option(self, option):
+    def get_option(self, option=None):
         """@todo: Docstring for get_option.
 
         :option: @todo
         :returns: @todo
 
         """
-        pass
+        out = self.invoke("volume-options-list-info",
+                          "volume", self.name
+                         )
+        check_zapi_error(out)
+        option_dict = {}
+        for opt in out.child_get('options').children_get():
+            option_name = opt.child_get_string('name')
+            option_value = opt.child_get_string('value')
+            option_dict[option_name] = option_value
+        if option:
+            return option_dict[option]
+        else:
+            return option_dict
     def set_option(self, option, value):
         """@todo: Docstring for set_option.
 
@@ -343,13 +352,28 @@ class volume:
         :returns: @todo
 
         """
-    #    out = self.invoke("snapshot-list-info",
-    #                               "target-name", volume_name,
-    #                               "target-type", "volume",
-    #                               "terse", "True"
-    #                              )
-
-        pass
+        out = self.invoke("snapshot-list-info",
+                                   "target-name", self.name,
+                                   "target-type", "volume",
+                                   "terse", "True"
+                                  )
+        check_zapi_error(out)
+        snapshots = out.child_get("snapshots").children_get()
+        snapshot_list = []
+        for snap in snapshots:
+            accesstime = float(snap.child_get_int("access-time"))
+            busy = (snap.child_get_string("busy") == "true")
+            dependency = snap.child_get_string("dependency")
+            if dependency == "":
+                dependency = None
+            snap_name = snap.child_get_string("name")
+            date = time.localtime(accesstime)
+            snapshot_list.append([snap_name,
+                                  time.strftime("%Y-%m-%d %H:%M:%S", date),
+                                  busy,
+                                  dependency
+                                 ])
+        return snapshot_list
     def create_snapshot(self, snap_name):
         """@todo: Docstring for create_snapshot.
 
@@ -357,7 +381,11 @@ class volume:
         :returns: @todo
 
         """
-        pass
+        out = self.invoke("snapshot-create",
+                          "volume", self.name,
+                          "snapshot", snap_name
+                         )
+        check_zapi_error(out)
     def delete_snapshot(self, snap_name):
         """@todo: Docstring for delete_snapshot.
 
@@ -365,11 +393,78 @@ class volume:
         :returns: @todo
 
         """
+        out = self.invoke("snapshot-delete",
+                          "volume", self.name,
+                          "snapshot", snap_name
+                         )
+        check_zapi_error(out)
+
+    def get_snapshot_schedule(self):
+        """@todo: Docstring for get_snapshot_schedule.
+        :returns: @todo
+
+        """
+        out = self.invoke("snapshot-get-schedule",
+                          "volume", self.name
+                         )
+        check_zapi_error(out)
+        days = out.child_get_int('days')
+        hours = out.child_get_int('hours')
+        minutes = out.child_get_int('minutes')
+        weeks = out.child_get_int('weeks')
+        which_hours = out.child_get_string('which-hours')
+        which_minutes = out.child_get_string('which-minutes')
+        snap_sched = {'days': days,
+                      'hours': hours,
+                      'minutes': minutes,
+                      'weeks': weeks,
+                      'which-hours': which_hours,
+                      'which-minutes': which_minutes
+                     }
+        return snap_sched
+    def set_snapshot_schedule(self, snap_sched):
+        """@todo: Docstring for set_snapshot_schedule.
+
+        :snap_sched: Dict that my contain one or more of the following keys:
+            days,
+            hours,
+            minutes,
+            weeks,
+            which-hours,
+            which-minutes
+        :returns: @todo
+
+        """
+        list_in = NaElement('snapshot-set-schedule')
+        list_in.child_add_string('volume', self.name)
+        for snap_interval, snap_count in snap_sched.iteritems():
+            list_in.child_add_string(snap_interval, snap_count)
+        out = self.invoke_elem(list_in)
+        check_zapi_error(out)
+    def get_snapshot_reserve(self):
+        """@todo: Docstring for get_snapshot_reserve.
+        :returns: @todo
+
+        """
         pass
-    #def get_snapshots(self):
-    #    out = self.invoke("snapshot-list-info",
-    #                               "target-name", volume_name,
-    #                               "target-type", "volume",
-    #                               "terse", "True"
-    #                              )
+    def set_snapshot_reserve(self, reserve):
+        """@todo: Docstring for set_snapshot_reserve.
+
+        :reserve: @todo
+        :returns: @todo
+
+        """
+        pass
+    def sis_enable(self):
+        """@todo: Docstring for sis_enable.
+        :returns: @todo
+
+        """
+        pass
+    def sis_disable(self):
+        """@todo: Docstring for sis_disable.
+        :returns: @todo
+
+        """
+        pass
 
