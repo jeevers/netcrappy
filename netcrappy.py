@@ -33,13 +33,13 @@ class filer:
     '''
     Class for interacting with Filers or Clusters
     '''
-    def __init__(self, filer, user, password, transport_type='HTTPS'):
+    def __init__(self, filer_name, user, password, transport_type='HTTPS'):
         '''
         Creates the connection to the filer. Transport_type defaults to 'HTTPS'.
         Todo:
             Allow different connection styles?
         '''
-        conn = NaServer(filer, 1, 3)
+        conn = NaServer(filer_name, 1, 3)
         out = conn.set_transport_type(transport_type)
         check_zapi_error(out, "connection to filer failed: %s")
         out = conn.set_style("LOGIN")
@@ -59,7 +59,7 @@ class filer:
         check_zapi_error(out)
         return out
 
-    def invoke_elem(self,  naelem):
+    def invoke_elem(self, naelem):
         """@todo: Docstring for invoke_elem.
 
         :naelem: NaElement object
@@ -67,6 +67,25 @@ class filer:
 
         """
         out = self.conn.invoke_elem(naelem)
+        check_zapi_error(out)
+        return out
+
+    def invoke_cli(self, command):
+        """Undocumented API that runs supplied arguments as a command. API
+        documentation and python code found here:
+            https://communities.netapp.com/message/74370
+
+        :command: @todo
+        :returns: Object containing cli-output (string) and 
+                  cli-result-value (integer)
+
+        """
+        args = NaElement('args')
+        for arg in command.split():
+            args.child_add(NaElement('arg', arg))
+        cli = NaElement('system-cli')
+        cli.child_add(args)
+        out = self.invoke_elem(cli)
         check_zapi_error(out)
         return out
 
@@ -92,6 +111,7 @@ class filer:
             priv = obj.child_get_string("privilege-level")
             obj_list.append([obj_name, priv])
         return obj_list
+
     def get_instance_list(self, perf_obj):
         '''
         Lists instances associated with the supplied performance object.
@@ -110,7 +130,6 @@ class filer:
         for inst in result:
             inst_name = inst.child_get_string("name")
             instance_names.append(inst_name)
-        
         return instance_names
 
     def get_counter_list(self, perf_obj):
@@ -250,11 +269,11 @@ class filer:
         return sysinfo
 
 
-
 class volume:
     def __init__(self, filer_inst, name):
         self.invoke = filer_inst.invoke
         self.invoke_elem = filer_inst.invoke_elem
+        self.invoke_cli = filer_inst.invoke_cli
         self.name = name
 
     def create(self, aggr, size):
@@ -293,6 +312,7 @@ class volume:
                          'name', self.name
                          )
         check_zapi_error(out)
+
     def offline(self, cifs_delay=0):
         """@todo: Docstring for offline.
         :cifs_delay: number of minutes to delay offline for cifs users
@@ -305,6 +325,7 @@ class volume:
                          'cifs-delay', cifs_delay
                          )
         check_zapi_error(out)
+
     def destroy(self):
         """@todo: Docstring for destroy.
         :returns: @todo
@@ -313,6 +334,7 @@ class volume:
         out = self.invoke('volume-destroy',
                          'name', self.name)
         check_zapi_error(out)
+
     def get_option(self, option=None):
         """@todo: Docstring for get_option.
 
@@ -333,6 +355,7 @@ class volume:
             return option_dict[option]
         else:
             return option_dict
+
     def set_option(self, option, value):
         """@todo: Docstring for set_option.
 
@@ -347,6 +370,7 @@ class volume:
                           'option-value', value
                           )
         check_zapi_error(out)
+
     def get_snapshots(self):
         """@todo: Docstring for get_snapshots.
         :returns: @todo
@@ -374,6 +398,7 @@ class volume:
                                   dependency
                                  ])
         return snapshot_list
+
     def create_snapshot(self, snap_name):
         """@todo: Docstring for create_snapshot.
 
@@ -386,6 +411,7 @@ class volume:
                           "snapshot", snap_name
                          )
         check_zapi_error(out)
+
     def delete_snapshot(self, snap_name):
         """@todo: Docstring for delete_snapshot.
 
@@ -422,6 +448,7 @@ class volume:
                       'which-minutes': which_minutes
                      }
         return snap_sched
+
     def set_snapshot_schedule(self, snap_sched):
         """@todo: Docstring for set_snapshot_schedule.
 
@@ -441,12 +468,19 @@ class volume:
             list_in.child_add_string(snap_interval, snap_count)
         out = self.invoke_elem(list_in)
         check_zapi_error(out)
+
     def get_snapshot_reserve(self):
         """@todo: Docstring for get_snapshot_reserve.
         :returns: @todo
 
         """
-        pass
+        out = self.invoke("snapshot-get-reserve",
+                          "volume", self.name
+                         )
+        check_zapi_error(out)
+        reserve = out.child_get_int('percent-reserved')
+        return reserve
+
     def set_snapshot_reserve(self, reserve):
         """@todo: Docstring for set_snapshot_reserve.
 
@@ -454,17 +488,104 @@ class volume:
         :returns: @todo
 
         """
-        pass
+        out = self.invoke('snapshot-set-reserve',
+                          'volume', self.name,
+                          'percentage', reserve
+                         )
+        check_zapi_error(out)
+
+    def set_snapshot_autodelete(self, option_name, option_value):
+        """@todo: Docstring for set_snapshot_autodelete.
+
+        :option: @todo
+        :value: @todo
+        :returns: @todo
+
+        """
+        out = self.invoke('snapshot-autodelete-set-option',
+                          'volume', self.name,
+                          'option-name', option_name,
+                          'option-value', option_value
+                         )
+        check_zapi_error(out)
+
+    def sis_status(self):
+        """@todo: Docstring for sis_status.
+        :returns: @todo
+
+        """
+        out = self.invoke('sis-status'
+                          'path', "/vol/%s" % self.name
+                         )
+        check_zapi_error(out)
+        sis_object = out.child_get('sis-object')
+        status = sis_object.child_get_string('status')
+        return status
+
     def sis_enable(self):
         """@todo: Docstring for sis_enable.
         :returns: @todo
 
         """
-        pass
+        out = self.invoke("sis-enable",
+                          "path", "/vol/%s" % self.name
+                         )
+        check_zapi_error(out)
+
     def sis_disable(self):
         """@todo: Docstring for sis_disable.
         :returns: @todo
 
         """
+        out = self.invoke("sis-disable",
+                          "path", "/vol/%s" % self.name
+                         )
+        check_zapi_error(out)
+
+    def get_qtree_security(self):
+        """@todo: Docstring for get_qtree_security.
+        :returns: @todo
+
+        """
+        out = self.invoke_cli("qtree security /vol/%s" % self.name)
+        check_zapi_error(out)
+        output_message = out.child_get_string("cli-output")
+        #output_code = out.child_get_int("cli-result-value")
+        qtree_pattern = re.compile("^.*has (mixed|ntfs|unix) security style and oplocks are (enabled|disabled).\n$")
+        match = qtree_pattern.match(output_message)
+        if match:
+            security_style = match.groups()[0]
+            return security_style
+        else:
+            raise NetCrAPIOut(output_message.strip())
+
+    def set_qtree_security(self, security):
+        """@todo: Docstring for set_qtree_security.
+
+        :security: qtree security value, can be unix, ntfs, or mixed
+        :returns: @todo
+
+        """
+        if security not in ['unix', 'ntfs', 'mixed']:
+            raise NetCrAPIOut('The security style can only be unix, ntfs, or mixed.')
+        else:
+            out = self.invoke_cli('qtree security /vol/%s %s' %
+                                  (self.name, security)
+                                 )
+            output_message = out.child_get_string('cli-output')
+            if not output_message == '':
+                raise NetCrAPIOut(output_message.strip())
+    
+    def get_autosize(self):
+        """@todo: Docstring for get_autosize.
+        :returns: @todo
+
+        """
         pass
 
+    def set_autosize(self):
+        """@todo: Docstring for set_autosize.
+        :returns: @todo
+
+        """
+        pass
