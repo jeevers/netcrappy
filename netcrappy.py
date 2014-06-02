@@ -303,6 +303,62 @@ class volume:
         out = self.invoke_elem(list_in)
         check_zapi_error(out)
 
+    def get_info(self):
+        """@todo: Docstring for get_info.
+        :returns: @todo
+
+        """
+        volume_info = {'autosize': 'autosize-info',
+                       'block-type': 'string',
+                       'clone-children': 'clone-child-info',
+                       'clone-parent': 'clone-parent-info',
+                       'containing-aggregate': 'string',
+                       'files-total': 'integer',
+                       'files-used': 'integer',
+                       'owning-vfiler': 'string',
+                       'percentage-used': 'integer',
+                       'sis': 'sis-info',
+                       'size-available': 'integer',
+                       'size-total': 'integer',
+                       'size-used': 'integer',
+                       'space-reserve': 'string',
+                       'state': 'string',
+                      }
+        out = self.invoke('volume-list-info',
+                          'volume', self.name,
+                          'verbose', 'true'
+                         )
+        volumes = out.child_get('volumes').children_get()
+        vol_info_dict = {}
+        if len(volumes) == 1:
+            vol = volumes[0]
+            for key, value in volume_info.iteritems():
+                if value == 'string':
+                    vol_info_dict[key] = vol.child_get_string(key)
+                elif value == 'integer':
+                    vol_info_dict[key] = vol.child_get_int(key)
+                elif value == 'autosize-info':
+                    vol_info_dict[key] = {}
+                    autosize = vol.child_get('autosize').child_get('autosize-info')
+                    vol_info_dict[key]['increment-size'] = autosize.child_get_int('increment-size')
+                    vol_info_dict[key]['maximum-size'] = autosize.child_get_int('maximum-size')
+                    vol_info_dict[key]['is-enabled'] = (autosize.child_get_string('is-enabled') == "true")
+                elif value == 'clone-child-info':
+                    child_clones = vol.child_get('clone-children')
+                    if child_clones:
+                        clones = child_clones.children_get()
+                        vol_info_dict[key] = [child.child_get_string('clone-child-name') for child in clones]
+                    else:
+                        vol_info_dict[key] = None
+                elif value == 'clone-parent-info':
+                    clone_parent = vol.child_get('clone-parent')
+                    if clone_parent:
+                        clones = clone_parent.children_get()
+                        vol_info_dict[key] = [{'parent-volume-name': parent.child_get_string('parent-volume-name'), 'parent-snapshot-name': parent.child_get_string('parent-snapshot-name')} for parent in clones]
+                    else:
+                        vol_info_dict[key] = None
+            return vol_info_dict
+
     def online(self):
         """@todo: Docstring for online.
         :returns: @todo
