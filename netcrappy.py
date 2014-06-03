@@ -623,7 +623,8 @@ class volume:
 
         """
         if security not in ['unix', 'ntfs', 'mixed']:
-            raise NetCrAPIOut('The security style can only be unix, ntfs, or mixed.')
+            raise NetCrAPIOut(
+                'The security style can only be unix, ntfs, or mixed.')
         else:
             out = self.invoke_cli('qtree security /vol/%s %s' %
                                   (self.name, security)
@@ -637,11 +638,26 @@ class volume:
         :returns: @todo
 
         """
-        pass
+        autosize_params = self.get_info()['autosize']
+        return autosize_params
 
-    def set_autosize(self):
+    def set_autosize(self, enabled, maximum, increment):
         """@todo: Docstring for set_autosize.
+
+        :enabled: @todo
+        :maximum: @todo
+        :increment: @todo
         :returns: @todo
 
         """
-        pass
+        size_regex = re.compile('[1-9][0-9]*[kmgt]')
+        for item in [maximum, increment]:
+            if not size_regex.match(item):
+                raise NetCrAPIOut("Size not valid. Please use <number>k|m|g|t.")
+        out = self.invoke('volume-autosize-set',
+                          'volume', self.name,
+                          'is-enabled', enabled,
+                          'maximum-size', maximum,
+                          'increment-size', increment
+                         )
+        check_zapi_error(out)
