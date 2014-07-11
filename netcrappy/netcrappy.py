@@ -29,7 +29,7 @@ def check_zapi_error(output, errormsg='An error occured: %s'):
         raise NetCrAPIOut(errormsg % reason)
 
 
-class filer:
+class Filer:
     '''
     Class for interacting with Filers or Clusters
     '''
@@ -39,7 +39,7 @@ class filer:
         Todo:
             Allow different connection styles?
         '''
-        conn = NaServer(filer_name, 1, 3)
+        conn = NaServer(filer_name, 1, 15)
         out = conn.set_transport_type(transport_type)
         check_zapi_error(out, "connection to filer failed: %s")
         out = conn.set_style("LOGIN")
@@ -269,7 +269,79 @@ class filer:
         return sysinfo
 
 
-class volume:
+class Cluster(Filer):
+
+    """Docstring for cluster. """
+
+    def __init__(self, filer_name, user, password, transport_type='HTTPS'):
+        """@todo: to be defined1. """
+        Filer.__init__(self, filer_name, user, password, transport_type='HTTPS')
+    
+    def set_vserver(self, vserver):
+        """@todo: Docstring for set_vserver.
+
+        :vserver: @todo
+        :returns: @todo
+
+        """
+        self.conn.set_vserver(vserver)
+
+    def get_vservers(self):
+        """@todo: Docstring for get_vservers.
+        :returns: @todo
+
+        """
+
+        vserver_list = []
+        vservers = self.invoke('vserver-get-iter')
+        vserver_list = vserver_list + vservers.child_get('attributes-list').children_get()
+        next_tag = vservers.child_get_string('next-tag')
+        while next_tag is not None:
+            vservers = self.invoke('vserver-get-iter', 'tag', next_tag)
+            vserver_list = vserver_list + vservers.child_get('attributes-list').children_get()
+            next_tag = vservers.child_get_string('next-tag')
+        vserver_dict = {}
+        for vserver in vserver_list:
+            name = vserver.child_get_string('vserver-name')
+            state = vserver.child_get_string('state')
+            type = vserver.child_get_string('vserver-type')
+            #allowed_protocols = [proto.child_get_string('protocol') for proto in vserver.child_get('allowed-protocols').children_get() if vserver.child_get('allowed-protocols') is not None]
+            vserver_dict[name] = {'state': state,
+                                  'type': type,
+                                  #'allowed-protocols': allowed_protocols
+                                 }
+        return vserver_dict
+
+    def get_volumes(self,  vserver='', max_records=20):
+        """@todo: Docstring for get_volumes.
+
+        :vserver: @todo
+        :returns: @todo
+
+        """
+        self.set_vserver(vserver)
+        volume_list = []
+        volumes = self.invoke('volume-get-iter')
+        volume_list = volume_list + volumes.child_get('attributes-list').children_get()
+        next_tag = volumes.child_get_string('next-tag')
+        while next_tag is not None:
+            volumes = self.invoke('volume-get-iter', 'tag', next_tag)
+            volume_list = volume_list + volumes.child_get('attributes-list').children_get()
+            next_tag = volumes.child_get_string('next-tag')
+        self.set_vserver('')
+        volumes_dict = {}
+        for volume in volume_list:
+            name = volume.child_get('volume-id-attributes').child_get_string('name')
+            owning_vserver = volume.child_get('volume-id-attributes').child_get_string('owning-vserver-name')
+            state = volume.child_get('volume-state-attributes').child_get_string('state')
+            volumes_dict[name] = { 'state': state,
+                                  'owning-vserver-name': owning_vserver
+                                 }
+        return volumes_dict
+        
+
+
+class Volume:
     def __init__(self, filer_inst, name):
         self.invoke = filer_inst.invoke
         self.invoke_elem = filer_inst.invoke_elem
