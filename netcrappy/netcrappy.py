@@ -1,6 +1,7 @@
 import sys
 import time
 import re
+import copy
 
 from NaServer import NaServer
 from NaElement import NaElement
@@ -276,6 +277,11 @@ class Cluster(Filer):
     def __init__(self, filer_name, user, password, transport_type='HTTPS'):
         """@todo: to be defined1. """
         Filer.__init__(self, filer_name, user, password, transport_type='HTTPS')
+        self.vserver_objs = {}
+        #for vserver in self.get_vservers():
+        #    vserver_obj = copy.deepcopy(self)
+        #    vserver_obj.set_vserver(vserver)
+        #    self.vserver_objs[vserver] = vserver_obj
     
     def set_vserver(self, vserver):
         """@todo: Docstring for set_vserver.
@@ -365,7 +371,7 @@ class Cluster(Filer):
                                  }
         return volumes_dict
 
-    def create_vol(self, name, aggr, size):
+    def create_vol(self, name, aggr, size, vserver_name):
         """@todo: Docstring for create_vol.
 
         :name: @todo
@@ -374,9 +380,20 @@ class Cluster(Filer):
         :returns: @todo
 
         """
-        pass
+        #set_vserver sets the vserver for the Cluster object, so
+        #copy the cluster object and set it on the copy
+        try:
+            #pull a cached vserver object
+            vserver_obj = self.vserver_objs[vserver_name]
+        except KeyError:
+            #or generate a new object and place in a dict for later use
+            vserver_obj = copy.deepcopy(self)
+            vserver_obj.set_vserver(vserver_name)
+            self.vserver_objs[vserver_name] = vserver_obj
+        vol = Volume(vserver_obj, name)
+        vol.create(aggr, size)
+        return vol
         
-
 
 class Volume:
     def __init__(self, filer_inst, name):
