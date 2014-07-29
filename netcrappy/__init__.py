@@ -1,1 +1,2 @@
-from netcrappy import Filer, Volume, Cluster, NaElement
+from ontap7mode import Filer, Volume, NaElement
+from ontapcmode import Cluster, ClusterVolume

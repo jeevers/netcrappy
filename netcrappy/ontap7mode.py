@@ -216,7 +216,7 @@ class Filer:
         :returns: 'volume' object
 
         """
-        vol = volume(self, name)
+        vol = Volume(self, name)
         vol.create(aggr, size)
         return vol
 
@@ -269,131 +269,6 @@ class Filer:
                     sysinfo[filer_name][item_name] = filer_obj.child_get_int(item_name)
         return sysinfo
 
-
-class Cluster(Filer):
-
-    """Docstring for cluster. """
-
-    def __init__(self, filer_name, user, password, transport_type='HTTPS'):
-        """@todo: to be defined1. """
-        Filer.__init__(self, filer_name, user, password, transport_type='HTTPS')
-        self.vserver_objs = {}
-        #for vserver in self.get_vservers():
-        #    vserver_obj = copy.deepcopy(self)
-        #    vserver_obj.set_vserver(vserver)
-        #    self.vserver_objs[vserver] = vserver_obj
-    
-    def set_vserver(self, vserver):
-        """@todo: Docstring for set_vserver.
-
-        :vserver: @todo
-        :returns: @todo
-
-        """
-        self.conn.set_vserver(vserver)
-
-    def api_get_iter(self,  iter_api):
-        """@todo: Docstring for api_get_iter.
-
-        :iter_api: @todo
-        :returns: @todo
-
-        """
-        obj_list = []
-        objs = self.invoke(iter_api)
-        obj_list = obj_list + objs.child_get('attributes-list').children_get()
-        next_tag = objs.child_get_string('next-tag')
-        while next_tag is not None:
-            objs = self.invoke(iter_api, 'tag', next_tag)
-            obj_list = obj_list + objs.child_get('attributes-list').children_get()
-            next_tag = objs.child_get_string('next-tag')
-        return obj_list
-
-    def get_vservers(self):
-        """@todo: Docstring for get_vservers.
-        :returns: @todo
-
-        """
-        vserver_list = self.api_get_iter('vserver-get-iter')
-        vserver_dict = {}
-        for vserver in vserver_list:
-            name = vserver.child_get_string('vserver-name')
-            state = vserver.child_get_string('state')
-            type = vserver.child_get_string('vserver-type')
-            if vserver.child_get('allowed-protocols') is not None:
-                allowed_protocols = []
-                for proto in vserver.child_get('allowed-protocols').children_get():
-                    #it should work like this:
-                    #allowed_protocols.append(proto.child_get_string('protocol'))
-                    #but NOOOOOOOOOOOOOOOO
-                    inside_xml = re.compile('<protocol>(.*)</protocol>')
-                    allowed_protocols.append(inside_xml.findall(proto.sprintf())[0])
-            else:
-                allowed_protocols = None
-            if vserver.child_get('vserver-aggr-info-list') is not None:
-                #This will only return data if an aggr has been delegated 
-                #to the vserver
-                aggr_dict = {}
-                for aggr in vserver.child_get('vserver-aggr-info-list').children_get():
-                    aggr_name = aggr.child_get_string('aggr-name')
-                    aggr_avail = aggr.child_get_int('aggr-availsize')
-                    aggr_dict[aggr_name] = {'aggr-availsize': aggr_avail}
-            else:
-                aggr_dict = None
-
-            vserver_dict[name] = {'state': state,
-                                  'type': type,
-                                  'allowed-protocols': allowed_protocols,
-                                  'vserver-aggr-info': aggr_dict
-                                 }
-        return vserver_dict
-
-    def get_volumes(self, vserver=None, max_records=20):
-        """@todo: Docstring for get_volumes.
-
-        :vserver: @todo
-        :returns: @todo
-
-        """
-        if vserver:
-            orig_vserver = self.conn.get_vserver()
-            self.set_vserver(vserver)
-        volume_list = self.api_get_iter('volume-get-iter')
-        if vserver:
-            self.set_vserver(orig_vserver)
-        volumes_dict = {}
-        for volume in volume_list:
-            name = volume.child_get('volume-id-attributes').child_get_string('name')
-            owning_vserver = volume.child_get('volume-id-attributes').child_get_string('owning-vserver-name')
-            state = volume.child_get('volume-state-attributes').child_get_string('state')
-            volumes_dict[name] = { 'state': state,
-                                  'owning-vserver-name': owning_vserver
-                                 }
-        return volumes_dict
-
-    def create_vol(self, name, aggr, size, vserver_name):
-        """@todo: Docstring for create_vol.
-
-        :name: @todo
-        :aggr: @todo
-        :size: @todo
-        :returns: @todo
-
-        """
-        #set_vserver sets the vserver for the Cluster object, so
-        #copy the cluster object and set it on the copy
-        try:
-            #pull a cached vserver object
-            vserver_obj = self.vserver_objs[vserver_name]
-        except KeyError:
-            #or generate a new object and place in a dict for later use
-            vserver_obj = copy.deepcopy(self)
-            vserver_obj.set_vserver(vserver_name)
-            self.vserver_objs[vserver_name] = vserver_obj
-        vol = Volume(vserver_obj, name)
-        vol.create(aggr, size)
-        return vol
-        
 
 class Volume:
     def __init__(self, filer_inst, name):
