@@ -146,56 +146,71 @@ class ClusterVolume(ontap7mode.Volume):
         :returns: @todo
 
         """
-        volume_info = {'autosize': 'autosize-info',
-                       'block-type': 'string',
-                       'clone-children': 'clone-child-info',
-                       'clone-parent': 'clone-parent-info',
-                       'containing-aggregate': 'string',
-                       'files-total': 'integer',
-                       'files-used': 'integer',
-                       'owning-vfiler': 'string',
-                       'percentage-used': 'integer',
-                       'sis': 'sis-info',
-                       'size-available': 'integer',
-                       'size-total': 'integer',
-                       'size-used': 'integer',
-                       'space-reserve': 'string',
-                       'state': 'string',
+        volume_info = {'volume-autosize-attributes': {
+                           'maximum-size': 'integer',
+                           'increment-size': 'integer',
+                           'is-enabled': 'boolean'
+                       },
+                       'volume-id-attributes': {
+                           'containing-aggregate-name': 'string',
+                           'type': 'string',
+                           'owning-vserver-name': 'string'
+                       },
+                       'volume-inode-attributes': {
+                           'files-total': 'integer',
+                           'files-used': 'integer',
+                           'block-type': 'string'
+                       },
+                       'volume-state-attributes': {
+                           'state': 'string'
+                       },
+                       'volume-space-attributes': {
+                           'percentage-size-used': 'integer',
+                           'size-total': 'integer',
+                           'size-available': 'integer',
+                           'size-used': 'integer',
+                           'size-used-by-snapshots': 'integer',
+                           'space-guarantee': 'string',
+                           'size': 'integer',
+                           'percentage-snapshot-reserve': 'integer',
+                           'percentage-fractional-reserve': 'integer',
+                       },
+                       'volume-sis-attributes': {
+                           'is-sis-volume': 'boolean',
+                           'deduplication-space-saved': 'integer',
+                           'compression-space-saved': 'integer',
+                           'total-space-saved': 'integer'
+                       }
                       }
-        out = self.invoke('volume-list-info',
-                          'volume', self.name,
-                          'verbose', 'true'
-                         )
-        volumes = out.child_get('volumes').children_get()
+        vol_get_iter = NaElement('volume-get-iter')
+        query = NaElement('query')
+        vol_query_attrs = NaElement('volume-attributes')
+        vol_id_attrs = NaElement('volume-id-attributes')
+        vol_get_iter.child_add(query)
+        query.child_add(vol_query_attrs)
+        vol_query_attrs.child_add(vol_id_attrs)
+        vol_id_attrs.child_add_string('name', self.name)
+        out = self.invoke_elem(vol_get_iter)
+        attributes_list = out.child_get('attributes-list').children_get()[0]
+        #print attributes_list.sprintf()
         vol_info_dict = {}
-        if len(volumes) == 1:
-            vol = volumes[0]
-            for key, value in volume_info.iteritems():
-                if value == 'string':
-                    vol_info_dict[key] = vol.child_get_string(key)
-                elif value == 'integer':
-                    vol_info_dict[key] = vol.child_get_int(key)
-                elif value == 'autosize-info':
-                    vol_info_dict[key] = {}
-                    autosize = vol.child_get('autosize').child_get('autosize-info')
-                    vol_info_dict[key]['increment-size'] = autosize.child_get_int('increment-size')
-                    vol_info_dict[key]['maximum-size'] = autosize.child_get_int('maximum-size')
-                    vol_info_dict[key]['is-enabled'] = (autosize.child_get_string('is-enabled') == "true")
-                elif value == 'clone-child-info':
-                    child_clones = vol.child_get('clone-children')
-                    if child_clones:
-                        clones = child_clones.children_get()
-                        vol_info_dict[key] = [child.child_get_string('clone-child-name') for child in clones]
-                    else:
-                        vol_info_dict[key] = None
-                elif value == 'clone-parent-info':
-                    clone_parent = vol.child_get('clone-parent')
-                    if clone_parent:
-                        clones = clone_parent.children_get()
-                        vol_info_dict[key] = [{'parent-volume-name': parent.child_get_string('parent-volume-name'), 'parent-snapshot-name': parent.child_get_string('parent-snapshot-name')} for parent in clones]
-                    else:
-                        vol_info_dict[key] = None
-            return vol_info_dict
+        for vol_attribute_type, attributes in volume_info.iteritems():
+            attribute_group = attributes_list.child_get(vol_attribute_type)
+            for attr_name, data_type in attributes.iteritems():
+                #print vol_attribute_type
+                #print attribute_group
+                #print attr_name
+                #print data_type
+                if data_type == 'string':
+                    data = attribute_group.child_get_string(attr_name)
+                    vol_info_dict[attr_name] = data
+                elif data_type == 'integer':
+                    data = attribute_group.child_get_int(attr_name)
+                    vol_info_dict[attr_name] = data
+                elif data_type == 'boolean':
+                    data = (attribute_group.child_get_string(attr_name) == 'true')
+                    vol_info_dict[attr_name] = data
+        return vol_info_dict
 
     def offline(self):
         """@todo: Docstring for offline.
