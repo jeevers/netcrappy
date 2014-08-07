@@ -438,8 +438,12 @@ class Volume:
                                    "target-type", "volume",
                                    "terse", "True"
                                   )
-        check_zapi_error(out)
-        snapshots = out.child_get("snapshots").children_get()
+        snapshots_child = out.child_get("snapshots")
+        #cluster-mode returns a construct without a <snapshots> element if
+        #there are no snapshots in the volume
+        if snapshots_child == None:
+            return []
+        snapshots = snapshots_child.children_get()
         snapshot_list = []
         for snap in snapshots:
             accesstime = float(snap.child_get_int("access-time"))
