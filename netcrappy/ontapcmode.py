@@ -34,6 +34,25 @@ class Cluster(ontap7mode.Filer):
         """
         self.conn.set_vserver(vserver)
 
+    def vserver(self, vserver_name):
+        """@todo: Docstring for vserver.
+
+        :vserver_name: @todo
+        :returns: @todo
+
+        """
+        #set_vserver sets the vserver for the Cluster object, so
+        #copy the cluster object and set it on the copy
+        try:
+            #pull a cached vserver object
+            vserver_obj = self.vserver_objs[vserver_name]
+        except KeyError:
+            #or generate a new object and place in a dict for later use
+            vserver_obj = copy.deepcopy(self)
+            vserver_obj.set_vserver(vserver_name)
+            self.vserver_objs[vserver_name] = vserver_obj
+        return vserver_obj
+
     def api_get_iter(self,  iter_api):
         """@todo: Docstring for api_get_iter.
 
@@ -113,7 +132,7 @@ class Cluster(ontap7mode.Filer):
                                  }
         return volumes_dict
 
-    def create_vol(self, name, aggr, size, vserver_name):
+    def create_vol(self, name, aggr, size, vserver_name=None):
         """@todo: Docstring for create_vol.
 
         :name: @todo
@@ -122,16 +141,13 @@ class Cluster(ontap7mode.Filer):
         :returns: @todo
 
         """
-        #set_vserver sets the vserver for the Cluster object, so
-        #copy the cluster object and set it on the copy
-        try:
-            #pull a cached vserver object
-            vserver_obj = self.vserver_objs[vserver_name]
-        except KeyError:
-            #or generate a new object and place in a dict for later use
-            vserver_obj = copy.deepcopy(self)
-            vserver_obj.set_vserver(vserver_name)
-            self.vserver_objs[vserver_name] = vserver_obj
+        if (vserver_name == None) and (self.conn.get_vserver() == ''):
+            raise ontap7mode.NetCrAPIOut('Vserver name not specified')
+            pass
+        elif vserver_name != None:
+            vserver_obj = self.vserver(vserver_name)
+        else:
+            vserver_obj = self
         vol = ClusterVolume(vserver_obj, name)
         vol.create(aggr, size)
         return vol
