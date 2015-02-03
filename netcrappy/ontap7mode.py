@@ -30,17 +30,18 @@ def check_zapi_error(output, errormsg='An error occured: %s'):
         raise NetCrAPIOut(errormsg % reason)
 
 
+
 class Filer:
     '''
     Class for interacting with Filers or Clusters
     '''
-    def __init__(self, filer_name, user, password, transport_type='HTTPS'):
+    def __init__(self, filer_name, user, password, transport_type='HTTPS', apiversion=(1,19)):
         '''
         Creates the connection to the filer. Transport_type defaults to 'HTTPS'.
         Todo:
             Allow different connection styles?
         '''
-        conn = NaServer(filer_name, 1, 15)
+        conn = NaServer(filer_name, apiversion[0], apiversion[1])
         out = conn.set_transport_type(transport_type)
         check_zapi_error(out, "connection to filer failed: %s")
         out = conn.set_style("LOGIN")
@@ -90,12 +91,85 @@ class Filer:
         check_zapi_error(out)
         return out
 
+    def api_recurse(self, api_structure, api_obj):
+        """
+        Takes a Dictionary representation of the api structure and
+        outputs a dict with the requested information. For example, 
+        the following code:
+            sample_api_obj = self.invoke('volume-list-info',
+                                         'volume',
+                                         'somerandomvol'
+                                        )
+            volume_list_info = {
+                'volumes': {
+                    'is_list': True,
+                    'name': 'string',
+                    'containing-aggregate': 'string',
+                    'sis': {
+                        'is_list': False,
+                        'sis-info': {
+                            'is_list': False,
+                            'status': 'string',
+                            'total-saved': 'integer'
+                        }
+                    },
+                    'size-available': 'integer',
+                    'size-total': 'integer',
+                    'size-used': 'integer'
+                }
+            }
+            self.api_recurse(volume_list_info, sample_api_obj)
+        would output:
+            {'volumes': [{'containing-aggregate': u'aggr0_ATA',
+                'name': u'somerandomvol',
+                'sis': {'sis-info': {'status': u'idle', 'total-saved': 0}},
+                'size-available': 64424275968,
+                'size-total': 64424509440,
+                'size-used': 233472}]}
+        The 'is_list' key is a boolean value that denotes that the
+        api_obj is a list that needs to be retrieved with 'get_children()'.
+        Note that the api structure can contain nested dictionaries;
+        each of these dictionaries will need an 'is_list' value/key pair.
+        """
+        return_dict = {}
+        for k, v in api_structure.iteritems():
+            if isinstance(v, dict) and v['is_list']:
+                #print "group %s from %s" % (k, api_obj)
+                api_obj_list = api_obj.child_get(k).children_get()
+                if api_obj_list is not None:
+                    return_dict[k] = [self.api_recurse(v, api_obj_nest) for api_obj_nest in api_obj_list]
+                else:
+                    return_dict[k] = None
+            elif isinstance(v, dict) and not v['is_list']:
+                api_obj_nest = api_obj.child_get(k)
+                if api_obj_nest is not None:
+                    return_dict[k] = self.api_recurse(v, api_obj_nest)
+                else:
+                    return_dict[k] = None
+            else:
+                if api_obj is not None:
+                    if v == 'string':
+                        #print('will get %s %s' % (v, k))
+                        return_dict[k] = api_obj.child_get_string(k)
+                    elif v == 'integer':
+                        #print('will get %s %s' % (v, k))
+                        return_dict[k] = api_obj.child_get_int(k)
+                    elif v == 'boolean':
+                        #print('will get %s %s' % (v, k))
+                        return_dict[k] = (api_obj.child_get_string(k) == 'true')
+                else:
+                    return_dict[k] = None
+        return return_dict
+
     def get_filer_api_list(self):
         '''
-         @todo: return list of ONTAP APIs
+        Returns list of ONTAP APIs.
         '''
         #list_in = NaElement("system-api-list")
-        pass
+        out = self.invoke('system-api-list')
+        api_list = out.child_get('apis').children_get()
+        apis = [api.child_get_string('name') for api in api_list]
+        return apis
 
     def get_perf_objects(self):
         '''
@@ -275,6 +349,7 @@ class Volume:
         self.invoke = filer_inst.invoke
         self.invoke_elem = filer_inst.invoke_elem
         self.invoke_cli = filer_inst.invoke_cli
+        self.api_recurse = filer_inst.api_recurse
         self.name = name
 
     def create(self, aggr, size):
@@ -666,3 +741,17 @@ class Volume:
                           'increment-size', increment
                          )
         check_zapi_error(out)
+
+class NFSExport:
+
+    """Docstring for NFSExport. """
+
+    def __init__(self, filer_inst, nfspath):
+        self.invoke = filer_inst.invoke
+        self.invoke_elem = filer_inst.invoke_elem
+        self.invoke_cli = filer_inst.invoke_cli
+        self.api_recurse = filer_inst.api_recurse
+        self.nfspath = nfspath
+
+
+        

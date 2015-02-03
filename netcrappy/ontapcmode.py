@@ -118,7 +118,10 @@ class Cluster(ontap7mode.Filer):
         """
         if vserver:
             orig_vserver = self.conn.get_vserver()
-            self.set_vserver(vserver)
+            if vserver in self.get_vservers():
+                self.set_vserver(vserver)
+            else:
+                raise ontap7mode.NetCrAPIOut('VServer does not exist')
         volume_list = self.api_get_iter('volume-get-iter')
         if vserver:
             self.set_vserver(orig_vserver)
