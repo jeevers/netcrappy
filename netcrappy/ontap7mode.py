@@ -29,6 +29,44 @@ def check_zapi_error(output, errormsg='An error occured: %s'):
         reason = output.results_reason()
         raise NetCrAPIOut(errormsg % reason)
 
+def dict_to_naelement(naelem_dict, parent_naelem=None):
+    """
+    Generates an NaElement object from a dictionary, useful for
+    API calls that require nested NaElement objects (like nfs exports)
+    or for spoofing response objects.
+
+    Note that the outermost dictionary can only contain one parent
+    key and the optional attribute.
+    """
+    attrs = None
+    #if not parent_naelem and len(naelem_dict) > 2 and 'attrs' not in naelem_dict:
+    #    raise NetCrAPIOut('There can only be ONE (top level element)!')
+    for k, v in naelem_dict.iteritems():
+        if k == 'attrs':
+            attrs = v
+            #print "attrs: "
+            #print v
+            continue
+        else:
+            if isinstance(v, dict):
+                new_naelem = NaElement(k)
+                if parent_naelem:
+                    parent_naelem.child_add(new_naelem)
+                dict_to_naelement(v, new_naelem)
+            elif isinstance(v, list):
+                for item in v:
+                    new_naelem = NaElement(k)
+                    if parent_naelem:
+                        parent_naelem.child_add(new_naelem)
+                    dict_to_naelement(item, new_naelem)
+            elif isinstance(v, str):
+                if parent_naelem:
+                    parent_naelem.child_add_string(k, v)
+    if not parent_naelem:
+        if attrs:
+            for k, v  in attrs.iteritems():
+                new_naelem.attr_set(k, v)
+        return new_naelem
 
 
 class Filer:
@@ -258,28 +296,18 @@ class Filer:
 
         """
         out = self.invoke('aggr-list-info')
-        check_zapi_error(out)
-        aggr_info_items = {"name": "string",
+        aggr_info_items = {"aggregates": {
+                           "is_list": True,
+                           "name": "string",
                            "state": "string",
                            "size-total": "integer",
                            "size-used": "integer",
                            "size-available": "integer",
                            "volume-count": "integer",
-                           "has-local-root": "string"
-                          }
-        aggr_list = out.child_get('aggregates').children_get()
-        aggr_info = {}
-        for aggr_obj in aggr_list:
-            aggr_name = aggr_obj.child_get_string('name')
-            aggr_info[aggr_name] = {}
-            #print aggr_name
-            for item_name, item_type in aggr_info_items.iteritems():
-                #print("name: %s, type: %s" % (item_name, item_type))
-                if item_type == 'string':
-                    aggr_info[aggr_name][item_name] = aggr_obj.child_get_string(item_name)
-                elif item_type == 'integer':
-                    aggr_info[aggr_name][item_name] = aggr_obj.child_get_int(item_name)
-        return aggr_info            
+                           "has-local-root": "boolean"
+                          }}
+        aggr_info = self.api_recurse(aggr_info_items, out)
+        return aggr_info['aggregates']            
 
     def create_vol(self, name, aggr, size):
         """@todo: Docstring for create_vol.
@@ -301,8 +329,8 @@ class Filer:
 
         """
         out = self.invoke('system-get-info')
-        check_zapi_error(out)
-        system_info_objs = {"backplane-part-number": "string", 
+        system_info_objs = {"system-info":{"is_list": False,
+                            "backplane-part-number": "string", 
                             "backplane-revision": "string",
                             "backplane-serial-number": "string",
                             "board-speed": "integer",
@@ -322,7 +350,7 @@ class Filer:
                             "partner-system-name": "string",
                             "partner-system-serial-number": "string",
                             "prod-type": "string",
-                            "supports-raid-array": "string",
+                            "supports-raid-array": "boolean",
                             "system-id": "string",
                             "system-machine-type": "string",
                             "system-model": "string",
@@ -330,18 +358,9 @@ class Filer:
                             "system-revision": "string",
                             "system-serial-number": "string",
                             "vendor-id": "string"
-                           }
-        sysinfo_filers = out.children_get()
-        sysinfo = {}
-        for filer_obj in sysinfo_filers:
-            filer_name = filer_obj.child_get_string('system-name')
-            sysinfo[filer_name] = {}
-            for item_name, item_type in system_info_objs.iteritems():
-                if item_type == 'string':
-                    sysinfo[filer_name][item_name] = filer_obj.child_get_string(item_name)
-                elif item_type == 'integer':
-                    sysinfo[filer_name][item_name] = filer_obj.child_get_int(item_name)
-        return sysinfo
+                           }}
+        sysinfo = self.api_recurse(system_info_objs, out)
+        return sysinfo['system-info']
 
 
 class Volume:
