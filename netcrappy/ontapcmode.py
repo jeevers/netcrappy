@@ -91,13 +91,16 @@ class Cluster(ontap7mode.Filer):
                     allowed_protocols.append(inside_xml.findall(proto.sprintf())[0])
             else:
                 allowed_protocols = None
-            if vserver.child_get('vserver-aggr-info-list') is not None:
+            if vserver.child_get('vserver-aggr-info-list'):
                 #This will only return data if an aggr has been delegated 
                 #to the vserver
                 aggr_dict = {}
                 for aggr in vserver.child_get('vserver-aggr-info-list').children_get():
                     aggr_name = aggr.child_get_string('aggr-name')
-                    aggr_avail = aggr.child_get_int('aggr-availsize')
+                    try:
+                        aggr_avail = aggr.child_get_int('aggr-availsize')
+                    except ValueError:
+                        aggr_avail=0
                     aggr_dict[aggr_name] = {'aggr-availsize': aggr_avail}
             else:
                 aggr_dict = None
