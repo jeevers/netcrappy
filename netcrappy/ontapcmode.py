@@ -157,6 +157,34 @@ class Cluster(ontap7mode.Filer):
         vol = ClusterVolume(vserver_obj, name)
         vol.create(aggr, size)
         return vol
+
+    def get_aggrs(self):
+        """
+        Get all aggregates in cluster.
+        :returns: A Dict in the form of:
+            {'<aggrname>':{
+                'size-available': <integer>,
+                'size-total': <integer>,
+                'size-used': <integer>},
+                ...}
+        """
+        aggr_info = {'aggregate-name': 'string',
+                     'aggr-space-attributes':{
+                         'is_list': False,
+                         'size-available': 'integer',
+                         'size-total': 'integer',
+                         'size-used': 'integer'
+                    }}
+
+        aggrs = self.api_get_iter('aggr-get-iter')
+        aggr_out = {}
+        for aggr in aggrs:
+            aggr_data = self.api_recurse(aggr_info, aggr)
+            #print aggr_data
+            aggr_name = aggr_data['aggregate-name']
+            aggr_space = aggr_data['aggr-space-attributes']
+            aggr_out[aggr_name] = aggr_space
+        return aggr_out
         
 
 class ClusterVolume(ontap7mode.Volume):
